@@ -60,7 +60,8 @@
       }
     },
     "android": {
-      "minSdkVersion": 24
+      "minSdkVersion": 24,
+      "debugApplicationIdSuffix": ".debug"
     },
     "iOS": {
       "minimumSystemVersion": "14.0"

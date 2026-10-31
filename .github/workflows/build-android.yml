@@ -141,6 +141,39 @@ jobs:
           find src-tauri/gen/android -name "*.apk" -exec cp {} dist-apk/ \;
           ls -la dist-apk/
 
+      # 安卓不允许安装未签名的包，而 Tauri 在没配置 keystore 时不会自动签名。
+      # 这里在 CI 内生成一个自签名 keystore 完成签名（仅用于侧载体验；
+      # 正式上架请改用你自己的发布密钥，并妥善保管）。
+      - name: Sign release APK
+        run: |
+          set -euo pipefail
+          KEYSTORE=/tmp/meetingmind.keystore
+          "$JAVA_HOME/bin/keytool" -genkeypair -v \
+            -keystore "$KEYSTORE" -alias meetingmind \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass meetingmind -keypass meetingmind \
+            -dname "CN=MeetingMind, OU=Dev, O=MeetingMind, L=Shanghai, ST=Shanghai, C=CN"
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/*/ | head -1)"
+          APKSIGNER="${BT}apksigner"
+          ZIPALIGN="${BT}zipalign"
+          echo "apksigner=$APKSIGNER"; echo "zipalign=$ZIPALIGN"
+          "$APKSIGNER" version
+          shopt -s nullglob
+          UNSIGNED=(dist-apk/*-unsigned.apk)
+          for f in "${UNSIGNED[@]}"; do
+            OUT="dist-apk/MeetingMind-v1.0.0-android-release.apk"
+            "$ZIPALIGN" -p -f 4 "$f" "$OUT"
+            "$APKSIGNER" sign \
+              --ks "$KEYSTORE" --ks-pass pass:meetingmind --key-pass pass:meetingmind \
+              --min-sdk-version 24 \
+              --out "$OUT.signed" "$OUT"
+          mv "$OUT.signed" "$OUT"
+          rm -f "$f"
+          echo "signed -> $OUT ($(wc -c < "$OUT") bytes)"
+          done
+          "$APKSIGNER" verify --print-certs "$OUT" | head -20
+          ls -la dist-apk/
+
       # 发布到 GitHub Release：得到永久有效的直链下载地址
       # （Actions Artifact 90 天后会过期，Release 不会）
       - name: Publish APKs to GitHub Release
