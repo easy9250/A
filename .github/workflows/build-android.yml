@@ -109,6 +109,22 @@ jobs:
       - name: Init Tauri Android project
         run: npm run tauri android init
 
+      # Tauri 2 的 bundle.android 不再支持 permissions 字段，改为直接写入生成的 AndroidManifest.xml
+      - name: Ensure Android mic/internet permission
+        run: |
+          set -euo pipefail
+          MF=src-tauri/gen/android/app/src/main/AndroidManifest.xml
+          python3 - "$MF" <<'PY'
+          import sys, re
+          p = sys.argv[1]
+          s = open(p, encoding='utf-8').read()
+          for perm in ("android.permission.RECORD_AUDIO", "android.permission.INTERNET"):
+              if perm not in s:
+                  s = re.sub(r'(<manifest\b[^>]*>)', r'\1\n    <uses-permission android:name="%s"/>' % perm, s, count=1)
+                  print("added", perm)
+          open(p, "w", encoding="utf-8").write(s)
+          PY
+
       - name: Build Android APK (debug, 可直接侧载安装)
         run: npm run tauri -- android build --debug
 

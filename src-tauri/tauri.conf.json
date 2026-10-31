@@ -55,27 +55,15 @@
       "dmg": {}
     },
     "linux": {
-      "deb": {
-        "dependencies": []
-      },
       "appimage": {
         "bundleMediaFramework": false
       }
     },
     "android": {
-      "minSdkVersion": 24,
-      "targetSdkVersion": 34,
-      "permissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.INTERNET"
-      ]
+      "minSdkVersion": 24
     },
     "iOS": {
-      "minimumSystemVersion": "14.0",
-      "infoPlist": {
-        "NSMicrophoneUsageDescription": "MeetingMind 需要使用麦克风以进行会议实时转写",
-        "UIBackgroundModes": ["audio"]
-      }
+      "minimumSystemVersion": "14.0"
     }
   }
 }
