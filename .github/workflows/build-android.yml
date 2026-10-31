@@ -52,23 +52,25 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # 不使用 android-actions/setup-android：其 v3 会去安装 Google 已下线的 "tools" 包，
-      # 导致 sdkmanager 退出码 1 而失败。GitHub 运行机本身已预装 Android SDK
-      # （/usr/local/lib/android/sdk），这里直接复用，仅安装仍然有效的包。
+      # 不使用 android-actions/setup-android：其 v3 会去安装 Google 已下线的 "tools" 包而必失败；
+      # 也不依赖 runner 预装（实测 ubuntu-latest 并未预装 Android SDK）。
+      # 这里直接从官方下载 command-line tools 并自行安装。
       - name: Setup Android SDK & NDK
         run: |
           set -euo pipefail
-          export ANDROID_HOME="/usr/local/lib/android/sdk"
+          export ANDROID_HOME="$HOME/android-sdk"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-          # cmdline-tools 的版本目录不写死，动态查找（如 cmdline-tools/16.0/bin）
-          CT_BIN="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin 2>/dev/null | head -1)"
-          echo "${CT_BIN:-$ANDROID_HOME/cmdline-tools/latest/bin}" >> "$GITHUB_PATH"
+          # 下载官方 command-line tools（约 150MB）
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fsSL -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          # 接受许可协议
+          # 接受许可协议，并安装仍然有效的包（不再引用已被下线的 tools）
           yes | sdkmanager --licenses >/dev/null || true
-          # 仅安装仍然有效的包（不再引用已被下线的 tools）
           sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" "ndk;${NDK_VERSION}"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
           echo "$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_PATH"
