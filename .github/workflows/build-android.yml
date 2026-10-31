@@ -26,11 +26,11 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
+    # 注意：不要在 job 级 env 里引用 env.ANDROID_HOME（它由 setup-android 在运行时才设置，
+    # 在 job env 求值阶段尚未存在，会导致 GitHub 校验失败、整条工作流 0 job 直接 failure）。
+    # 这里只放字面量；ANDROID_NDK_HOME 在安装 NDK 的步骤里通过 GITHUB_ENV 注入后续步骤。
     env:
-      # Tauri 2 默认使用的 NDK 版本；若 gradle 报 NDK 版本不匹配，
-      # 改这里与下方 sdkmanager 安装的 ndk 版本即可。
       NDK_VERSION: "25.2.9519653"
-      ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
 
     steps:
       - name: Checkout
@@ -64,6 +64,8 @@ jobs:
         run: |
           yes | sdkmanager --licenses
           sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;${NDK_VERSION}"
+          # 把 NDK 路径注入到后续步骤的环境变量中
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
       - name: Install npm dependencies
         run: npm install
@@ -97,9 +99,6 @@ jobs:
 
       - name: Build Android APK (debug, 可直接侧载安装)
         run: npm run tauri android build
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
 
       - name: List built APKs (debug)
         run: find src-tauri/gen/android -name "*.apk" -print
