@@ -67,8 +67,12 @@ jobs:
           curl -fsSL -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
           mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          # 关键：同一步骤内 >> $GITHUB_PATH 不会让“当前 shell”的 PATH 立即生效，必须显式 export
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          # 自检：确认 sdkmanager 已就位，否则给出清晰报错
+          command -v sdkmanager >/dev/null || { echo "sdkmanager 未安装成功，目录内容如下："; ls -la "$ANDROID_HOME/cmdline-tools/latest/bin" 2>&1; exit 1; }
           # 接受许可协议，并安装仍然有效的包（不再引用已被下线的 tools）
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" "ndk;${NDK_VERSION}"
@@ -106,7 +110,7 @@ jobs:
         run: npm run tauri android init
 
       - name: Build Android APK (debug, 可直接侧载安装)
-        run: npm run tauri android build
+        run: npm run tauri -- android build --debug
 
       - name: List built APKs (debug)
         run: find src-tauri/gen/android -name "*.apk" -print
