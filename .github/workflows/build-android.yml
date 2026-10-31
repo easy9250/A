@@ -21,7 +21,7 @@ on:
     branches: [main, master]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   android:
@@ -125,15 +125,42 @@ jobs:
           open(p, "w", encoding="utf-8").write(s)
           PY
 
-      - name: Build Android APK (debug, 可直接侧载安装)
+      - name: Build universal debug APK (4 架构通用，体积较大)
         run: npm run tauri -- android build --debug
 
-      - name: List built APKs (debug)
-        run: find src-tauri/gen/android -name "*.apk" -print
+      # 精简 release 包：仅 arm64（现代安卓手机通用），去掉调试符号后体积小得多，
+      # 更适合传到手机安装。失败不影响主流程（此时仍可用上面的通用调试包）。
+      - name: Build slim arm64 release APK (可选产物)
+        continue-on-error: true
+        run: npm run tauri -- android build --target aarch64 --apk
 
-      - name: Upload APK artifact
+      - name: Collect built APKs
+        run: |
+          set -euo pipefail
+          mkdir -p dist-apk
+          find src-tauri/gen/android -name "*.apk" -exec cp {} dist-apk/ \;
+          ls -la dist-apk/
+
+      # 发布到 GitHub Release：得到永久有效的直链下载地址
+      # （Actions Artifact 90 天后会过期，Release 不会）
+      - name: Publish APKs to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v1.0.0-android
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "MeetingMind Android APK" --notes "由 GitHub Actions 云端构建" --target main
+          fi
+          for f in dist-apk/*.apk; do
+            echo ">>> uploading $f"
+            gh release upload "$TAG" "$f" --clobber
+          done
+          gh release view "$TAG" --json url,assets
+
+      - name: Upload APK artifact (备份通道)
         uses: actions/upload-artifact@v4
         with:
           name: meetingmind-apk
-          path: src-tauri/gen/android/**/*.apk
+          path: dist-apk/*.apk
           if-no-files-found: error
