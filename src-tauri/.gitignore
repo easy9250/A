@@ -1,0 +1,5 @@
+# Rust 编译产物
+/target/
+
+# Tauri 移动端生成目录（执行 `tauri android init` / `tauri ios init` 后生成，无需纳入版本库）
+/gen/

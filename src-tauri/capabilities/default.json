@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "主窗口默认权限：麦克风（getUserMedia 由 WebView 直接处理）、WebSocket 转写（CSP 已放行）、本地存储均由核心默认权限覆盖。",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

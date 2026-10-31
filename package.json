@@ -1,0 +1,49 @@
+{
+  "name": "meetingmind",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MeetingMind - 工作会议实时转录与结构化纪要 Web 应用",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:icon": "tauri icon"
+  },
+  "dependencies": {
+    "@cloudbase/js-sdk": "^2.28.8",
+    "@emotion/react": "^11.11.4",
+    "@emotion/styled": "^11.11.4",
+    "@mui/icons-material": "^5.18.0",
+    "@mui/material": "^5.18.0",
+    "@tanstack/react-virtual": "^3.14.24",
+    "@tauri-apps/api": "^2.0.0",
+    "idb": "^8.0.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.6",
+    "zustand": "^4.5.7"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^2.1.9",
+    "autoprefixer": "^10.4.20",
+    "fake-indexeddb": "^6.2.7",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.19",
+    "typescript": "~5.5.4",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.9"
+  }
+}

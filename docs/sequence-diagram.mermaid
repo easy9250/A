@@ -1,0 +1,201 @@
+%% MeetingMind 程序调用流程时序图
+%% 来源：docs/ARCHITECTURE.md §4
+%% 说明：① 开始会议→实时转录→发言落库  ② 结束会议→AI/规则结构化→纪要渲染  ③ 导出四格式
+%%      附：启动时 CloudBase 3s 降级判定
+
+%% ============ 链路①：开始会议 → 实时转录 → 发言落库 ============
+%%```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户(会议主持人)
+    participant P as LivePage
+    participant S as useSpeechSession
+    participant MC as MediaController
+    participant F as SpeechProviderFactory
+    participant WS as WebSpeechProvider(L0)
+    participant ST as useMeetingStore
+    participant Row as UtteranceRow(订阅单行)
+    participant R as Repository(Local)
+
+    U->>P: 点击「开始会议」
+    P->>ST: startMeeting(title, agenda)
+    ST->>ST: 建 Meeting(status=active), clock.start()
+    P->>S: bootSession(meetingId, lang)
+
+    S->>MC: init(deviceId)
+    MC->>MC: getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})
+    MC-->>S: stream
+    S->>MC: startRec()  %% MediaRecorder.start(1000) 分片
+
+    S->>F: createSpeechProvider(handlers, {lang, probeMs:8000})
+    F->>F: window.isSecureContext? / 有 SpeechRecognition?
+    F->>WS: new + start() 后 8 秒探活
+    alt 8s 内拿到非空 transcript
+        WS-->>F: got=true
+        F-->>S: ISpeechProvider(level=0, WebSpeechProvider)
+        S->>ST: setUi(speechLevel=0, badge='实时识别中')
+    else 8s 无结果 / network 错误
+        WS-->>F: got=false / fatal
+        F-->>S: ISpeechProvider(level=1, RecordOnlyProvider)
+        S->>ST: setUi(speechLevel=1, banner='已切换为录音模式')
+    end
+    S->>WS: provider.start(stream)  %% L0 自取麦克风, 与我们 MediaStream 并存
+
+    loop 说话过程中
+        WS->>S: onInterim(text, atMs)
+        S->>S: throttle 200ms 写入 uiStore.interim（★ 不进 uttMap）
+        Note over Row: interim 由 TranscriptList 尾部独立组件渲染，600 行列表不重绘
+        WS->>S: onFinal(text, atMs, confidence)
+        S->>ST: addUtterance({seq++, speakerId:currentSpeakerId, text, startMs, endMs, source:'asr'})
+        ST->>ST: 更新 utteranceIds + uttMap[id]（仅新对象引用变更）
+        ST-->>Row: 细粒度订阅 s=>s.uttMap[id] 触发单行渲染
+        Note over ST: 标记 dirty，App 的 5s 防抖 effect 负责落盘
+    end
+
+    Note over WS: onend 触发（Chrome 常态）
+    WS->>S: onend → 300ms 后 start() 自动重启
+    S->>ST: setUi(notice='识别服务已重连')
+    alt 连续重启失败 3 次
+        S->>F: 请求降级
+        F-->>S: RecordOnlyProvider / ManualProvider
+        S->>ST: setUi(speechLevel, banner 明示降级)
+    end
+
+    App->>R: saveSnapshot(currentSnapshot)  %% 5s 防抖 / 关键操作立即 flush
+    R->>R: 按 seq 水位增量写 utterances + 更新 searchBlob
+    Note over R: 成功后异步 setMirror(cloudRepo) 追写云端（fire-and-forget）
+%%```
+
+%% ============ 链路②：结束会议 → AI/规则结构化 → 纪要渲染 ============
+%%```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant P as LivePage
+    participant UI as useUiStore
+    participant S as useSpeechSession
+    participant MC as MediaController
+    participant ST as useMeetingStore
+    participant SF as createStructurer
+    participant AI as CloudAiStructurer
+    participant RU as RuleStructurer
+    participant CB as CloudBaseClient
+    participant R as Repository
+    participant RP as ReviewPage
+
+    U->>P: 点击「结束会议」
+    P->>UI: ConfirmDialog 二次确认
+    UI-->>P: confirmed
+    P->>S: finishMeeting()
+    S->>MC: stopRec()
+    MC-->>S: {blob, size, mime}
+    S->>ST: endMeeting(durationMs = clock.elapsedMs(), hasAudio)
+    ST->>ST: status='ended', endedAt=now, 冻结 seq
+    S->>R: putAudio(meetingId, blob) → audioLocalKey
+    R-->>S: key
+    S->>R: saveSnapshot(finalSnapshot)  %% immediate flush
+    R-->>S: ok
+
+    P->>SF: createStructurer()
+    alt cloudStatus === 'cloud'
+        SF-->>P: CloudAiStructurer
+        P->>AI: structure({meeting, participants, utterances})
+        AI->>CB: getAiModel() → app.ai().createModel('hunyuan-exp')
+        CB-->>AI: model
+        AI->>CB: model.generateText({model:'hunyuan-2.0-instruct-20251111', messages})
+        Note over AI,CB: 长文本按 8000 字分片；整体 12s 硬超时
+        alt 成功且 JSON 校验通过
+            CB-->>AI: raw JSON
+            AI->>AI: cleanJson + 对齐 sourceUtteranceIds
+            AI-->>P: StructResult(origin:'ai')
+        else 超时 / 失败 / 解析失败
+            P->>RU: 回落 structure(同 input)
+            RU-->>P: StructResult(origin:'rule')
+            P->>UI: toast.warning('AI 整理超时，已使用本地规则生成初稿')
+        end
+    else cloudStatus === 'local'
+        SF-->>P: RuleStructurer
+        P->>RU: structure(input)
+        RU->>RU: 分段(≥90s / 切换词) + 决议句式 + 待办句式 + 负责人/优先级/日期解析
+        RU-->>P: StructResult(origin:'rule')
+    end
+
+    P->>ST: applyStructResult(result)
+    ST->>ST: topics / decisions / actionItems 落库（候选态 confirmed=false）
+    ST->>R: saveSnapshot()  %% 800ms 防抖
+    P->>RP: navigate(`/review/${id}`)
+    RP->>R: loadSnapshot(id)
+    R-->>RP: MeetingSnapshot
+    RP->>RP: 渲染 大纲 / TopicSection / OutcomePanel（虚线候选态）
+    U->>RP: 勾选确认 / 编辑 / 拖拽排序 / Ctrl+Z 撤销
+    RP->>ST: mutaion → 800ms 防抖 saveSnapshot
+%%```
+
+%% ============ 链路③：导出四格式 ============
+%%```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant EM as ExportMenu
+    participant R as Repository
+    participant EX as core/export/index
+    participant HTML as toPrintHtml
+    participant IO as lib/utils (download/clipboard)
+
+    U->>EM: 点击「导出 ▾」
+    EM->>U: Menu: Markdown | 纯文本 | JSON | 打印 HTML | 复制待办清单
+    U->>EM: 选择格式
+    EM->>R: loadSnapshot(meetingId)
+    R-->>EM: MeetingSnapshot
+    EM->>EX: exportSnapshot(snapshot, format)
+
+    alt Markdown / 纯文本 / JSON
+        EX->>EX: 组装 sections(会议信息→议题→要点→决议→待办→附录发言)
+        EX-->>EM: {content, ext, mime}
+    else 打印 HTML
+        EX->>HTML: renderPrintHtml(snapshot)
+        HTML-->>EX: 完整 HTML 字符串（内嵌 CSS + @media print A4 分页）
+        EX-->>EM: {content, ext:'html', mime:'text/html'}
+    end
+
+    EM->>EX: downloadFile(content, buildFileName(meeting, ext))
+    EX->>IO: URL.createObjectURL + <a download> + revokeObjectURL
+    EM->>UI: toast.success('已导出 xxx.md')
+
+    opt P1-10 复制待办清单
+        EM->>EX: buildActionListText(snapshot, 'table'|'md')
+        EX->>IO: navigator.clipboard.writeText(text)
+        alt 剪贴板不可用（非安全上下文）
+            EX->>IO: 回退: 临时 textarea + document.execCommand('copy')
+        end
+        EX-->>EM: ok
+    end
+
+    opt 用户直接 Ctrl/Cmd+P
+        U->>HTML: 用导出的 HTML 在新窗口打开(window.print())
+        HTML-->>U: A4 分页 PDF 预览（可直接保存）
+    end
+%%```
+
+%% ============ 附：启动时 CloudBase 3s 降级判定（非阻塞首屏） ============
+%%```mermaid
+sequenceDiagram
+    participant App as App.tsx(useEffect)
+    participant CB as CloudBaseClient
+    participant UI as useUiStore
+    participant R as Repository
+    Note over App: 首屏不等 cloud，默认 local 全功能可用
+    App->>UI: cloudStatus='probing'
+    App->>CB: probe(3000)
+    CB->>CB: withTimeout(dynamicImport('@cloudbase/js-sdk'), 3000)
+    alt 3s 内 init OK
+        CB->>CB: auth.signInAnonymously()
+        CB-->>App: {status:'cloud', app}
+        App->>UI: cloudStatus='cloud'
+        App->>R: getRepo().setMirror(cloudRepo)
+    else 超时 / 无 env / 网络不可达
+        CB-->>App: {status:'local', reason}
+        App->>UI: cloudStatus='local' + banner
+    end
+    Note over App: 全程 UI 已在 local 模式下渲染完成，用户无感
+%%```

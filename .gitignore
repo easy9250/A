@@ -1,0 +1,15 @@
+# 依赖与构建产物（无需纳入版本库）
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# 环境变量 / 密钥（即使里面是占位符也别提交）
+.env
+.env.local
+.env.*.local
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+*.log

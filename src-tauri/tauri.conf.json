@@ -1,0 +1,81 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MeetingMind",
+  "version": "1.0.0",
+  "identifier": "com.meetingmind.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "MeetingMind",
+        "width": 1180,
+        "height": 800,
+        "minWidth": 820,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: asset: https://; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost wss://asr.cloud.tencent.com https://asr.cloud.tencent.com https://*.tencentcloudapi.com blob:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "工作会议实时转录与结构化纪要",
+    "longDescription": "MeetingMind 在本地完成会议的实时语音转写、结构化纪要与导出；支持桌面（Windows/macOS/Linux）与移动端（Android/iOS）原生运行，点击图标即可启动，无需本地服务器或浏览器。",
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": true,
+        "languages": ["SimpChinese", "English"],
+        "installMode": "perMachine"
+      },
+      "wix": {
+        "language": "zh-CN"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "dmg": {}
+    },
+    "linux": {
+      "deb": {
+        "dependencies": []
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "android": {
+      "minSdkVersion": 24,
+      "targetSdkVersion": 34,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET"
+      ]
+    },
+    "iOS": {
+      "minimumSystemVersion": "14.0",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "MeetingMind 需要使用麦克风以进行会议实时转写",
+        "UIBackgroundModes": ["audio"]
+      }
+    }
+  }
+}

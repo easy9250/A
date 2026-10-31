@@ -1,0 +1,53 @@
+/* Tailwind 三条指令：注意 tailwind.config.js 已关闭 preflight，
+   这里 base 部分只剩 CSS 变量定义，不会与 MUI 的 CssBaseline 冲突。 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 细滚动条（字幕流、列表、抽屉使用） */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.35);
+  border-radius: 8px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* interim（识别中的灰字斜体）：不进列表，独立气泡渲染 */
+.utterance-interim {
+  font-style: italic;
+  color: #6b7280;
+  opacity: 0.9;
+}
+
+/* 搜索命中高亮 */
+mark {
+  background-color: #fde68a;
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* 拖拽/选择辅助 */
+.no-select {
+  user-select: none;
+}
+
+/* 打印基础：默认隐藏交互元素，具体分页规则见 core/export/toPrintHtml.ts */
+@media print {
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+}

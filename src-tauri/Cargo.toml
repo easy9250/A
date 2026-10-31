@@ -1,0 +1,28 @@
+[package]
+name = "meetingmind"
+version = "1.0.0"
+description = "MeetingMind - 工作会议实时转录与结构化纪要"
+authors = ["MeetingMind"]
+edition = "2021"
+rust-version = "1.77.2"
+
+# 桌面端产物：静态库 + C 动态库 + rlib，供桌面/移动宿主链接
+[lib]
+name = "meetingmind_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri 2 框架本体（仅启用核心能力；麦克风/WebSocket 走系统 WebView，无需额外插件）
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# ============ 如需「打开外部链接 / 文件导出落地」等能力，可启用官方插件 ============
+# tauri-plugin-opener  : 用系统默认程序打开 URL / 文件（移动端同样支持）
+# tauri-plugin-dialog  : 原生「保存/打开」对话框（桌面端）
+# tauri-plugin-fs      : 受控文件系统访问（导出文件到用户指定目录）
+# 当前核心需求（麦克风 + WebSocket 转写）仅需 core 默认权限即可，故保持最小依赖。
+# 若启用上述插件，记得在 lib.rs 注册并在 capabilities/default.json 增加对应权限。

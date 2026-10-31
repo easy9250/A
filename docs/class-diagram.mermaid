@@ -1,0 +1,153 @@
+%% MeetingMind 类图 / 数据结构与核心接口
+%% 来源：docs/ARCHITECTURE.md §3
+
+classDiagram
+    class Meeting {
+        +string id
+        +string title
+        +MeetingStatus status
+        +SpeechMode mode
+        +number durationMs
+        +number utteranceCount
+        +string searchBlob
+        +elapsedMs() number
+    }
+    class Participant {
+        +string id
+        +string name
+        +number colorIndex
+        +number order
+    }
+    class Utterance {
+        +string id
+        +number seq
+        +string speakerId
+        +string text
+        +number startMs
+        +MarkerKind marker
+        +UtteranceSource source
+    }
+    class Topic {
+        +string id
+        +number order
+        +string title
+        +string[] bullets
+        +Origin origin
+    }
+    class Decision {
+        +string id
+        +string content
+        +string[] sourceUtteranceIds
+        +boolean confirmed
+        +Origin origin
+    }
+    class ActionItem {
+        +string id
+        +string content
+        +string assigneeId
+        +string dueDate
+        +ActionPriority priority
+        +ActionStatus status
+    }
+    class MeetingSnapshot {
+        +number schemaVersion
+        +meeting: Meeting
+        +utterances: Utterance[]
+    }
+
+    Meeting "1" *-- "1..12" Participant
+    Meeting "1" *-- "*" Utterance
+    Meeting "1" *-- "*" Topic
+    Meeting "1" *-- "*" Decision
+    Meeting "1" *-- "*" ActionItem
+    Utterance "*" <.. Topic : startUtteranceId..endUtteranceId
+    Utterance "*" <.. Decision : sourceUtteranceIds
+    Utterance "*" <.. ActionItem : sourceUtteranceIds
+    ActionItem "*" --> "0..1" Participant : assigneeId
+    MeetingSnapshot *-- Meeting
+    MeetingSnapshot *-- Utterance
+
+    class ISpeechProvider {
+        <<interface>>
+        +SpeechLevel level
+        +start(stream) Promise~void~
+        +stop() void
+        +pause() void
+        +resume() void
+        +setLang(lang) void
+        +pushManualText(text) void
+    }
+    class SpeechProviderFactory {
+        +createSpeechProvider(handlers, opts) Promise~ISpeechProvider~
+        +probeWebSpeech(ms) Promise~boolean~
+    }
+    class WebSpeechProvider {
+        +restartGuard() void
+        -handleResult(e) void
+    }
+    class FallbackProviders {
+        +RecordOnlyProvider
+        +ManualProvider
+    }
+    ISpeechProvider <|.. WebSpeechProvider : L0
+    ISpeechProvider <|.. FallbackProviders : L1 / L2
+    SpeechProviderFactory ..> ISpeechProvider : creates
+
+    class MediaController {
+        +MediaStream stream
+        +init() Promise~MediaStream~
+        +listDevices() Promise~DeviceInfo[]~
+        +switchDevice(id) Promise~void~
+        +startRec() / stopRec() Promise~Blob~
+        +getLevel() number
+        +onEnergySpike(cb) void
+        +play(blob) / seek(ms) void
+    }
+
+    class Repository {
+        <<interface>>
+        +kind
+        +loadSnapshot(id) Promise~MeetingSnapshot~
+        +saveSnapshot(s) Promise~void~
+        +listSummaries(q) Promise~MeetingSummary[]~
+        +deleteMeeting(id) Promise~void~
+        +putAudio(id, blob) Promise~string~
+        +getAudio(id) Promise~Blob~
+        +setMirror(r) void
+    }
+    class LocalRepository {
+        +openDB() Promise~MMDB~
+        -appendUtterances(seqWatermark)
+        -updateSearchBlob()
+    }
+    class CloudRepository {
+        -ensureCollections()
+    }
+    Repository <|.. LocalRepository : IndexedDB
+    Repository <|.. CloudRepository : CloudBase mm_*
+    LocalRepository o-- Repository : mirror(云镜像)
+
+    class IStructurer {
+        <<interface>>
+        +kind
+        +structure(input, onPartial) Promise~StructResult~
+    }
+    class RuleStructurer {
+        +segment(utterances) Topic[]
+        +extractDecisions(utterances) Decision[]
+        +extractActions(utterances, map) ActionItem[]
+    }
+    class CloudAiStructurer {
+        +buildPrompt(chunk) string
+        +cleanJson(raw) StructResult
+    }
+    IStructurer <|.. RuleStructurer : origin=rule
+    IStructurer <|.. CloudAiStructurer : origin=ai
+
+    class CloudBaseClient {
+        +probe(timeout) Promise~CloudStatus~
+        +getAiModel() any
+        +signInAnon() Promise~void~
+    }
+    CloudRepository --> CloudBaseClient
+    CloudAiStructurer --> CloudBaseClient
