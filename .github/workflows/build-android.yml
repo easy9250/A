@@ -26,9 +26,8 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
-    # 注意：不要在 job 级 env 里引用 env.ANDROID_HOME（它由 setup-android 在运行时才设置，
-    # 在 job env 求值阶段尚未存在，会导致 GitHub 校验失败、整条工作流 0 job 直接 failure）。
-    # 这里只放字面量；ANDROID_NDK_HOME 在安装 NDK 的步骤里通过 GITHUB_ENV 注入后续步骤。
+    # 注意：job 级 env 只放字面量；ANDROID_HOME / ANDROID_NDK_HOME 等路径变量
+    # 在 “Setup Android SDK & NDK” 步骤里通过 >> $GITHUB_ENV 注入后续步骤。
     env:
       NDK_VERSION: "25.2.9519653"
 
@@ -47,25 +46,32 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
-      # cargo-ndk：把 Rust 编译为 Android 可用的 .so
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk
-
       - name: Setup Java (JDK 17)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android packages & accept licenses
+      # 不使用 android-actions/setup-android：其 v3 会去安装 Google 已下线的 "tools" 包，
+      # 导致 sdkmanager 退出码 1 而失败。GitHub 运行机本身已预装 Android SDK
+      # （/usr/local/lib/android/sdk），这里直接复用，仅安装仍然有效的包。
+      - name: Setup Android SDK & NDK
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;${NDK_VERSION}"
-          # 把 NDK 路径注入到后续步骤的环境变量中
+          set -euo pipefail
+          export ANDROID_HOME="/usr/local/lib/android/sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          # cmdline-tools 的版本目录不写死，动态查找（如 cmdline-tools/16.0/bin）
+          CT_BIN="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin 2>/dev/null | head -1)"
+          echo "${CT_BIN:-$ANDROID_HOME/cmdline-tools/latest/bin}" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          # 接受许可协议
+          yes | sdkmanager --licenses >/dev/null || true
+          # 仅安装仍然有效的包（不再引用已被下线的 tools）
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" "ndk;${NDK_VERSION}"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_PATH"
 
       - name: Install npm dependencies
         run: npm install
